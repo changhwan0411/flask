@@ -1,5 +1,6 @@
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session, g
 from werkzeug.security import generate_password_hash, check_password_hash
+import functools
 
 from pybo import db
 from pybo.forms import UserCreateForm, UserLoginForm
@@ -20,7 +21,7 @@ def signup():
           )
           db.session.add(user)
           db.session.commit()
-          return redirect(url_for('main.index'))
+          return redirect(url_for('auth.index'))
       else:
           flash('이미 존재 하는 아이디 입니다.')
 
@@ -39,7 +40,11 @@ def login():
         if error is None:
             session.clear()
             session['user_id'] = user.id
-            return redirect(url_for('main.index'))
+            _next = request.args.get('next', '') # next 파라미터 전달
+            if _next:
+                return redirect(_next)
+            else:
+                return redirect(url_for('main.index'))
         else:
             flash(error)
 
@@ -51,7 +56,6 @@ def logout():
     return redirect(url_for('main.index'))
 
 # 라우팅 함수보다 먼저 실행하는 함수
-
 @bp.before_app_request
 def load_logged_in_user():
     user_id = session.get('user_id')
@@ -59,5 +63,16 @@ def load_logged_in_user():
         g.user = None
     else:
         g.user = User.query.get(user_id)
+
+# 데코레이션 함수
+def login_required(view):
+    @functools.wraps(view)
+    def wrapped_view(*args, **kwargs):
+        if g.user is None:
+            _next= request.url if request.method == 'GET' else ''
+            return redirect(url_for('auth.login', next=_next))
+        return view(*args, **kwargs)
+    return wrapped_view
+
 
 
